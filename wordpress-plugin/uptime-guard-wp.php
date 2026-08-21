@@ -2,26 +2,20 @@
 /**
  * Plugin Name: UptimeGuard Plugin Monitor
  * Plugin URI: https://uptimeguard.dev
- * Description: Connects your WordPress site to UptimeGuard to monitor plugin updates. Reports installed plugins and available updates.
- * Version: 1.0.0
+ * Description: Connects your WordPress site to UptimeGuard to monitor plugin updates.
+ * Version: 1.0.1
  * Author: UptimeGuard
  * License: GPL v2 or later
  * Text Domain: uptime-guard
  */
 
-// Prevent direct access
 if (!defined('ABSPATH')) {
     exit;
 }
 
-// Constants
-define('UPTIME_GUARD_VERSION', '1.0.0');
-define('UPTIME_GUARD_PLUGIN_DIR', plugin_dir_path(__FILE__));
+define('UPTIME_GUARD_VERSION', '1.0.1');
 define('UPTIME_GUARD_OPTION_KEY', 'uptime_guard_settings');
 
-/**
- * Main Plugin Class
- */
 class UptimeGuardWP
 {
     private static $instance = null;
@@ -36,39 +30,25 @@ class UptimeGuardWP
 
     public function __construct()
     {
-        // Activation/Deactivation hooks
         register_activation_hook(__FILE__, [$this, 'activate']);
         register_deactivation_hook(__FILE__, [$this, 'deactivate']);
 
-        // Admin menu
         add_action('admin_menu', [$this, 'add_admin_menu']);
         add_action('admin_init', [$this, 'register_settings']);
-
-        // Settings page
         add_action('admin_enqueue_scripts', [$this, 'admin_enqueue_scripts']);
-
-        // Cron job for syncing
         add_action('uptime_guard_sync_cron', [$this, 'sync_plugins']);
-
-        // Add settings link to plugins list
         add_filter('plugin_action_links_' . plugin_basename(__FILE__), [$this, 'add_settings_link']);
-
-        // AJAX endpoints
         add_action('wp_ajax_uptime_guard_sync', [$this, 'ajax_sync']);
-        add_action('wp_ajax_uptime_guard_save_settings', [$this, 'ajax_save_settings']);
+
+        // Handle server-side pairing on form save
+        add_action('admin_init', [$this, 'handle_form_pairing']);
     }
 
-    /**
-     * Plugin activation
-     */
     public function activate()
     {
-        // Schedule cron job (every hour)
         if (!wp_next_scheduled('uptime_guard_sync_cron')) {
             wp_schedule_event(time(), 'hourly', 'uptime_guard_sync_cron');
         }
-
-        // Save default settings
         $settings = get_option(UPTIME_GUARD_OPTION_KEY, []);
         if (empty($settings)) {
             update_option(UPTIME_GUARD_OPTION_KEY, [
@@ -78,36 +58,19 @@ class UptimeGuardWP
                 'last_sync' => '',
             ]);
         }
-
-        // Initial sync after activation (after 30 seconds to let activation finish)
         wp_schedule_single_event(time() + 30, 'uptime_guard_sync_cron');
     }
 
-    /**
-     * Plugin deactivation
-     */
     public function deactivate()
     {
         wp_clear_scheduled_hook('uptime_guard_sync_cron');
     }
 
-    /**
-     * Add admin menu page
-     */
     public function add_admin_menu()
     {
-        add_options_page(
-            'UptimeGuard',
-            'UptimeGuard',
-            'manage_options',
-            'uptime-guard',
-            [$this, 'settings_page']
-        );
+        add_options_page('UptimeGuard', 'UptimeGuard', 'manage_options', 'uptime-guard', [$this, 'settings_page']);
     }
 
-    /**
-     * Register plugin settings
-     */
     public function register_settings()
     {
         register_setting(UPTIME_GUARD_OPTION_KEY, UPTIME_GUARD_OPTION_KEY, [
@@ -115,39 +78,24 @@ class UptimeGuardWP
         ]);
     }
 
-    /**
-     * Sanitize settings
-     */
     public function sanitize_settings($input)
     {
-        $sanitized = [];
-        $sanitized['app_url'] = esc_url_raw(rtrim($input['app_url'] ?? '', '/'));
-        $sanitized['pairing_code'] = sanitize_text_field($input['pairing_code'] ?? '');
-        $sanitized['connected'] = !empty($input['connected']) && $input['connected'] === '1';
-        $sanitized['last_sync'] = $input['last_sync'] ?? '';
-        return $sanitized;
+        return [
+            'app_url' => esc_url_raw(rtrim($input['app_url'] ?? '', '/')),
+            'pairing_code' => sanitize_text_field($input['pairing_code'] ?? ''),
+            'connected' => !empty($input['connected']) && $input['connected'] === '1',
+            'last_sync' => $input['last_sync'] ?? '',
+        ];
     }
 
-    /**
-     * Enqueue admin scripts
-     */
     public function admin_enqueue_scripts($hook)
     {
         if ($hook !== 'settings_page_uptime-guard') {
             return;
         }
-
-        wp_enqueue_style(
-            'uptime-guard-admin',
-            plugin_dir_url(__FILE__) . 'admin.css',
-            [],
-            UPTIME_GUARD_VERSION
-        );
+        wp_enqueue_style('uptime-guard-admin', plugin_dir_url(__FILE__) . 'admin.css', [], UPTIME_GUARD_VERSION);
     }
 
-    /**
-     * Add settings link in plugins list
-     */
     public function add_settings_link($links)
     {
         $settings_link = '<a href="' . admin_url('options-general.php?page=uptime-guard') . '">Settings</a>';
@@ -156,8 +104,43 @@ class UptimeGuardWP
     }
 
     /**
-     * Settings page HTML
+     * Handle pairing server-side when the form is submitted.
+     * This runs after WordPress saves the settings via sanitize_settings().
      */
+    public function handle_form_pairing()
+    {
+        // Only run when our settings form was submitted
+        if (!isset($_POST['option_page']) || $_POST['option_page'] !== UPTIME_GUARD_OPTION_KEY) {
+            return;
+        }
+        if (!isset($_POST['submit']) || $_POST['submit'] !== 'Save & Connect') {
+            return;
+        }
+
+        $settings = get_option(UPTIME_GUARD_OPTION_KEY, []);
+
+        if (empty($settings['app_url']) || empty($settings['pairing_code'])) {
+            return;
+        }
+
+        // Try to pair
+        $pair_result = $this->pair_site($settings);
+        if ($pair_result === true) {
+            // Also try initial sync
+            $this->sync_plugins();
+
+            // Add success admin notice
+            add_action('admin_notices', function () {
+                echo '<div class="notice notice-success is-dismissible"><p><strong>✅ Connected to UptimeGuard!</strong> Your plugin data is being synced.</p></div>';
+            });
+        } else {
+            $error_msg = is_wp_error($pair_result) ? $pair_result->get_error_message() : 'Pairing failed.';
+            add_action('admin_notices', function () use ($error_msg) {
+                echo '<div class="notice notice-error is-dismissible"><p><strong>❌ Connection failed:</strong> ' . esc_html($error_msg) . '</p></div>';
+            });
+        }
+    }
+
     public function settings_page()
     {
         $settings = get_option(UPTIME_GUARD_OPTION_KEY, [
@@ -184,140 +167,62 @@ class UptimeGuardWP
 
                 <table class="form-table">
                     <tr>
-                        <th scope="row">
-                            <label for="app_url">App URL</label>
-                        </th>
+                        <th scope="row"><label for="app_url">App URL</label></th>
                         <td>
-                            <input
-                                type="url"
-                                id="app_url"
+                            <input type="url" id="app_url"
                                 name="<?php echo esc_attr(UPTIME_GUARD_OPTION_KEY); ?>[app_url]"
                                 value="<?php echo esc_attr($settings['app_url']); ?>"
-                                class="regular-text"
-                                placeholder="https://your-app.com"
-                                required
-                            />
-                            <p class="description">The URL of your UptimeGuard application (e.g., https://uptimeguard.example.com)</p>
+                                class="regular-text" placeholder="https://your-app.onrender.com" required />
+                            <p class="description">The URL of your UptimeGuard application</p>
                         </td>
                     </tr>
                     <tr>
-                        <th scope="row">
-                            <label for="pairing_code">Pairing Code</label>
-                        </th>
+                        <th scope="row"><label for="pairing_code">Pairing Code</label></th>
                         <td>
-                            <input
-                                type="text"
-                                id="pairing_code"
+                            <input type="text" id="pairing_code"
                                 name="<?php echo esc_attr(UPTIME_GUARD_OPTION_KEY); ?>[pairing_code]"
                                 value="<?php echo esc_attr($settings['pairing_code']); ?>"
-                                class="regular-text"
-                                placeholder="ABC-1234"
-                                style="text-transform: uppercase; letter-spacing: 2px;"
-                                required
-                            />
+                                class="regular-text" placeholder="ABC-1234" required />
                             <p class="description">Enter the pairing code from your UptimeGuard dashboard.</p>
                         </td>
                     </tr>
-                    <?php if (!empty($settings['connected'])): ?>
                     <tr>
                         <th scope="row">Connection Status</th>
                         <td>
-                            <input type="hidden" name="<?php echo esc_attr(UPTIME_GUARD_OPTION_KEY); ?>[connected]" value="1" />
-                            <span class="uptime-guard-status connected">✅ Connected</span>
+                            <?php if (!empty($settings['connected'])): ?>
+                                <input type="hidden" name="<?php echo esc_attr(UPTIME_GUARD_OPTION_KEY); ?>[connected]" value="1" />
+                                <span style="color: green; font-weight: bold;">✅ Connected</span>
+                            <?php else: ?>
+                                <input type="hidden" name="<?php echo esc_attr(UPTIME_GUARD_OPTION_KEY); ?>[connected]" value="0" />
+                                <span style="color: red; font-weight: bold;">❌ Not Connected</span>
+                            <?php endif; ?>
                         </td>
                     </tr>
-                    <?php else: ?>
-                    <tr>
-                        <th scope="row">Connection Status</th>
-                        <td>
-                            <input type="hidden" name="<?php echo esc_attr(UPTIME_GUARD_OPTION_KEY); ?>[connected]" value="0" />
-                            <span class="uptime-guard-status disconnected">❌ Not Connected</span>
-                        </td>
-                    </tr>
-                    <?php endif; ?>
                 </table>
 
-                <?php submit_button('Save & Connect', 'primary', 'submit', true, [
-                    'id' => 'uptime-guard-connect-btn',
-                ]); ?>
+                <?php submit_button('Save & Connect'); ?>
             </form>
 
             <?php if (!empty($settings['connected'])): ?>
             <hr />
             <h2>Manual Sync</h2>
-            <p>Click the button below to immediately sync your plugin data with UptimeGuard.</p>
-            <button id="uptime-guard-sync-btn" class="button button-secondary">
-                Sync Now
-            </button>
+            <p>Click to immediately sync your plugin data with UptimeGuard.</p>
+            <button id="uptime-guard-sync-btn" class="button button-secondary">Sync Now</button>
             <span id="uptime-guard-sync-status"></span>
             <?php endif; ?>
         </div>
 
         <script>
         jQuery(document).ready(function($) {
-            // Handle Save & Connect
-            $('#uptime-guard-connect-btn').on('click', function(e) {
-                e.preventDefault();
-                var btn = $(this);
-                var form = btn.closest('form');
-                var appUrl = $('#app_url').val().replace(/\/$/, '');
-                var pairingCode = $('#pairing_code').val();
-
-                if (!appUrl || !pairingCode) {
-                    alert('Please enter both App URL and Pairing Code.');
-                    return;
-                }
-
-                btn.prop('disabled', true).val('Connecting...');
-
-                // First save settings via AJAX
-                $.post(ajaxurl, {
-                    action: 'uptime_guard_save_settings',
-                    app_url: appUrl,
-                    pairing_code: pairingCode
-                }).done(function() {
-                    // Now attempt to pair
-                    $.ajax({
-                        url: appUrl + '/api/wordpress/pair',
-                        type: 'POST',
-                        contentType: 'application/json',
-                        data: JSON.stringify({ pairing_code: pairingCode }),
-                        success: function(response) {
-                            // Mark as connected
-                            $.post(ajaxurl, {
-                                action: 'uptime_guard_save_settings',
-                                app_url: appUrl,
-                                pairing_code: pairingCode,
-                                connected: '1'
-                            }).done(function() {
-                                location.reload();
-                            });
-                        },
-                        error: function(xhr) {
-                            var msg = 'Connection failed.';
-                            if (xhr.responseJSON && xhr.responseJSON.message) {
-                                msg = xhr.responseJSON.message;
-                            }
-                            alert('❌ ' + msg);
-                            btn.prop('disabled', false).val('Save & Connect');
-                        }
-                    });
-                });
-            });
-
-            // Handle manual sync
             $('#uptime-guard-sync-btn').on('click', function() {
                 var btn = $(this);
                 var status = $('#uptime-guard-sync-status');
                 btn.prop('disabled', true);
                 status.text('Syncing...');
-
                 $.ajax({
                     url: ajaxurl,
                     type: 'POST',
-                    data: {
-                        action: 'uptime_guard_sync'
-                    },
+                    data: { action: 'uptime_guard_sync' },
                     success: function(response) {
                         if (response.success) {
                             status.html('<span style="color: green;">✅ ' + response.data.message + '</span>');
@@ -327,7 +232,7 @@ class UptimeGuardWP
                         btn.prop('disabled', false);
                     },
                     error: function() {
-                        status.html('<span style="color: red;">❌ Sync failed. Check your settings.</span>');
+                        status.html('<span style="color: red;">❌ Sync failed.</span>');
                         btn.prop('disabled', false);
                     }
                 });
@@ -337,28 +242,9 @@ class UptimeGuardWP
         <?php
     }
 
-    /**
-     * AJAX save settings handler
-     */
-    public function ajax_save_settings()
-    {
-        $settings = get_option(UPTIME_GUARD_OPTION_KEY, []);
-        $settings['app_url'] = esc_url_raw(rtrim($_POST['app_url'] ?? '', '/'));
-        $settings['pairing_code'] = sanitize_text_field($_POST['pairing_code'] ?? '');
-        if (isset($_POST['connected'])) {
-            $settings['connected'] = $_POST['connected'] === '1';
-        }
-        update_option(UPTIME_GUARD_OPTION_KEY, $settings);
-        wp_send_json_success('Settings saved.');
-    }
-
-    /**
-     * AJAX sync handler
-     */
     public function ajax_sync()
     {
         $result = $this->sync_plugins();
-
         if (is_wp_error($result)) {
             wp_send_json_error($result->get_error_message());
         } else {
@@ -366,12 +252,8 @@ class UptimeGuardWP
         }
     }
 
-    /**
-     * Get all installed plugins with their update status
-     */
     public function get_plugins_data()
     {
-        // Include WordPress plugin functions
         if (!function_exists('get_plugins')) {
             require_once ABSPATH . 'wp-admin/includes/plugin.php';
         }
@@ -379,14 +261,10 @@ class UptimeGuardWP
         $all_plugins = get_plugins();
         $active_plugins = get_option('active_plugins', []);
         $update_plugins = get_site_transient('update_plugins');
-
         $plugins_data = [];
 
         foreach ($all_plugins as $file => $plugin) {
             $is_active = in_array($file, $active_plugins);
-            $plugin_dir = plugin_dir_url(__FILE__);
-
-            // Check if update is available
             $has_update = false;
             $update_version = null;
 
@@ -410,9 +288,6 @@ class UptimeGuardWP
         return $plugins_data;
     }
 
-    /**
-     * Sync plugins data with UptimeGuard
-     */
     public function sync_plugins()
     {
         $settings = get_option(UPTIME_GUARD_OPTION_KEY, []);
@@ -422,17 +297,14 @@ class UptimeGuardWP
         }
 
         if (empty($settings['connected'])) {
-            // Try to pair first
             $pair_result = $this->pair_site($settings);
             if (is_wp_error($pair_result)) {
                 return $pair_result;
             }
         }
 
-        // Get plugin data
         $plugins = $this->get_plugins_data();
 
-        // Send to API
         $response = wp_remote_post($settings['app_url'] . '/api/wordpress/sync', [
             'headers' => [
                 'Content-Type' => 'application/json',
@@ -443,6 +315,7 @@ class UptimeGuardWP
                 'plugins' => $plugins,
             ]),
             'timeout' => 30,
+            'sslverify' => true,
         ]);
 
         if (is_wp_error($response)) {
@@ -453,30 +326,20 @@ class UptimeGuardWP
         $body = json_decode(wp_remote_retrieve_body($response), true);
 
         if ($code >= 200 && $code < 300) {
-            // Update last sync time
             $settings['last_sync'] = current_time('mysql');
             $settings['connected'] = true;
             update_option(UPTIME_GUARD_OPTION_KEY, $settings);
-
-            return sprintf(
-                'Synced %d plugins (%d outdated)',
-                $body['plugins_count'] ?? count($plugins),
-                $body['outdated_count'] ?? 0
-            );
+            return sprintf('Synced %d plugins (%d outdated)', $body['plugins_count'] ?? count($plugins), $body['outdated_count'] ?? 0);
         } else {
-            // If pairing code is invalid, mark as disconnected
             if ($code === 404) {
                 $settings['connected'] = false;
                 update_option(UPTIME_GUARD_OPTION_KEY, $settings);
-                return new WP_Error('pairing_failed', 'Pairing failed. Please check your pairing code and try again.');
+                return new WP_Error('pairing_failed', 'Pairing failed. Check your pairing code.');
             }
             return new WP_Error('sync_failed', 'Sync failed with status: ' . $code);
         }
     }
 
-    /**
-     * Pair the site with UptimeGuard
-     */
     private function pair_site($settings)
     {
         $response = wp_remote_post($settings['app_url'] . '/api/wordpress/pair', [
@@ -488,6 +351,7 @@ class UptimeGuardWP
                 'pairing_code' => $settings['pairing_code'],
             ]),
             'timeout' => 30,
+            'sslverify' => true,
         ]);
 
         if (is_wp_error($response)) {
@@ -502,10 +366,9 @@ class UptimeGuardWP
             update_option(UPTIME_GUARD_OPTION_KEY, $settings);
             return true;
         } else {
-            return new WP_Error('pairing_failed', $body['message'] ?? 'Pairing failed.');
+            return new WP_Error('pairing_failed', $body['message'] ?? 'Pairing failed with status: ' . $code);
         }
     }
 }
 
-// Initialize plugin
 UptimeGuardWP::instance();
