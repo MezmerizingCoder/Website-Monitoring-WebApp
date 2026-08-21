@@ -17,6 +17,8 @@ COPY . .
 
 # Create minimal .env for build-time artisan commands
 RUN echo "APP_KEY=" > .env
+RUN echo "APP_URL=https://website-monitoring-webapp.onrender.com" >> .env
+RUN echo "APP_ENV=production" >> .env
 
 # Install PHP dependencies (skip scripts, artisan needs .env)
 RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
@@ -33,6 +35,9 @@ RUN chmod +x docker-entrypoint.sh \
     && chown -R www-data:www-data /var/www/html \
     && chmod -R 755 /var/www/html/storage \
     && chmod -R 755 /var/www/html/bootstrap/cache
+
+ENV APP_URL=https://website-monitoring-webapp.onrender.com
+ENV APP_ENV=production
 
 EXPOSE 8000
 
