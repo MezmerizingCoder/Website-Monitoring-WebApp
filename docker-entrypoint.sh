@@ -1,15 +1,17 @@
 #!/bin/bash
 set -e
 
-# Write environment variables to .env file
+# Write all env vars to .env
 printenv | grep -E "^(APP_|DB_|MAIL_|CACHE_|QUEUE_|SESSION_|FILESYSTEM_|VITE_)" > .env
 
-# Force APP_URL to always use HTTPS
-sed -i 's|APP_URL=http://|APP_URL=https://|g' .env
-grep -q 'APP_URL=' .env || echo 'APP_URL=https://website-monitoring-webapp.onrender.com' >> .env
+# Force HTTPS - remove old APP_URL line and add correct one
+grep -v '^APP_URL=' .env > .env.tmp && mv .env.tmp .env
+echo 'APP_URL=https://website-monitoring-webapp.onrender.com' >> .env
 
-# Debug: show what APP_URL is set to
-echo "--- APP_URL=$(grep APP_URL .env) ---"
+# Debug
+echo "=== .env ==="
+cat .env
+echo "============"
 
 # Run migrations and start server
 php artisan migrate --force
