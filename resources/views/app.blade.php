@@ -9,7 +9,7 @@
     <meta http-equiv="Expires" content="0">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     @viteReactRefresh
-    {!! str_replace('http://', 'https://', \Illuminate\Support\Facades\Vite::content('resources/js/app.jsx')) !!}
+    @vite('resources/js/app.jsx')
   </head>
   <body>
     <div id="app"></div>
