@@ -1,0 +1,37 @@
+/* UptimeGuard Admin Styles */
+
+.uptime-guard-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.uptime-guard-status.connected {
+    background: #d4edda;
+    color: #155724;
+}
+
+.uptime-guard-status.disconnected {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+#uptime-guard-sync-btn {
+    margin-top: 10px;
+}
+
+#uptime-guard-sync-status {
+    margin-left: 10px;
+    font-weight: 600;
+}
+
+.wrap .form-table th {
+    width: 150px;
+}
+
+.notice-success {
+    border-left-color: #46b450;
+}
