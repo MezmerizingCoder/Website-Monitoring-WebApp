@@ -30,8 +30,9 @@ export default function CreateMonitor() {
     try {
       const body = { ...form };
       if (!body.keyword) delete body.keyword;
-      body.expected_status_code = parseInt(body.expected_status_code);
-      body.interval = parseInt(body.interval);
+      body.expected_status_code = String(body.expected_status_code);
+      body.interval_seconds = parseInt(body.interval);
+      delete body.interval;
 
       const response = await apiCall('/api/monitors', {
         method: 'POST',
