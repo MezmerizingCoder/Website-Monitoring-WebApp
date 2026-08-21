@@ -11,6 +11,9 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = React.useState(false);
 
   const login = async (email, password) => {
+    // Get CSRF cookie first (required by Sanctum)
+    await fetch('/sanctum/csrf-cookie', { credentials: 'same-origin' });
+
     const response = await fetch('/api/login', {
       method: 'POST',
       headers: {
@@ -40,6 +43,9 @@ export function AuthProvider({ children }) {
   };
 
   const register = async (name, email, password, password_confirmation) => {
+    // Get CSRF cookie first (required by Sanctum)
+    await fetch('/sanctum/csrf-cookie', { credentials: 'same-origin' });
+
     const response = await fetch('/api/register', {
       method: 'POST',
       headers: {
