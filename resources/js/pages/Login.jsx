@@ -11,7 +11,7 @@ export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const [isRegister, setIsRegister] = React.useState(false);
-  const [form, setForm] = React.useState({ name: '', email: '', password: '' });
+  const [form, setForm] = React.useState({ name: '', email: '', password: '', password_confirmation: '' });
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState(null);
 
@@ -99,6 +99,19 @@ export default function Login() {
                 required
               />
             </div>
+            {isRegister && (
+              <div className="space-y-2">
+                <Label htmlFor="password_confirmation">Confirm Password</Label>
+                <Input
+                  id="password_confirmation"
+                  type="password"
+                  placeholder="••••••••"
+                  value={form.password_confirmation}
+                  onChange={(e) => setForm({ ...form, password_confirmation: e.target.value })}
+                  required
+                />
+              </div>
+            )}
             <Button type="submit" className="w-full" disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {isRegister ? 'Create Account' : 'Sign In'}

@@ -13,6 +13,9 @@ echo "=== .env ==="
 cat .env
 echo "============"
 
-# Run migrations and start server
+# Run migrations and seed
 php artisan migrate --force
+php artisan db:seed --force
+
+# Start server
 php artisan serve --host=0.0.0.0 --port=8000
