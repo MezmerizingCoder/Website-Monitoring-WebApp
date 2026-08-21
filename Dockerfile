@@ -15,8 +15,8 @@ WORKDIR /var/www/html
 # Copy full application first
 COPY . .
 
-# Create .env from example if not present
-RUN cp -n .env.example .env 2>/dev/null || true
+# Create minimal .env for build-time artisan commands
+RUN echo "APP_KEY=" > .env
 
 # Install PHP dependencies (skip scripts, artisan needs .env)
 RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
@@ -29,10 +29,11 @@ RUN php artisan package:discover --ansi
 RUN npm ci && npm run build
 
 # Set permissions
-RUN chown -R www-data:www-data /var/www/html \
+RUN chmod +x docker-entrypoint.sh \
+    && chown -R www-data:www-data /var/www/html \
     && chmod -R 755 /var/www/html/storage \
     && chmod -R 755 /var/www/html/bootstrap/cache
 
 EXPOSE 8000
 
-CMD php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=8000
+ENTRYPOINT ["./docker-entrypoint.sh"]
