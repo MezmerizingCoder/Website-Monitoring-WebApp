@@ -12,22 +12,14 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 
-# --- Cache PHP dependencies ---
-# Copy only composer files first so this layer is cached until they change
-COPY composer.json composer.lock ./
-RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
-
-# --- Cache Node dependencies ---
-# Copy only package files first so this layer is cached until they change
-COPY package.json package-lock.json ./
-RUN npm ci --prefer-offline
-
-# --- Copy full application ---
+# Copy full application first
 COPY . .
 
-# Run post-autoload-dump scripts and build frontend
-RUN composer dump-autoload --optimize \
-    && npm run build
+# Install PHP dependencies
+RUN composer install --no-dev --optimize-autoloader --no-interaction
+
+# Install Node dependencies and build frontend
+RUN npm ci && npm run build
 
 # Set permissions
 RUN chown -R www-data:www-data /var/www/html \
