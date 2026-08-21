@@ -11,20 +11,13 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = React.useState(false);
 
   const login = async (email, password) => {
-    // Get CSRF cookie first (required by Sanctum)
-    await fetch('/sanctum/csrf-cookie', { credentials: 'same-origin' });
-
     const response = await fetch('/api/login', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         'X-Requested-With': 'XMLHttpRequest',
-        'X-XSRF-TOKEN': decodeURIComponent(
-          document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1] || ''
-        ),
       },
-      credentials: 'same-origin',
       body: JSON.stringify({ email, password }),
     });
 
@@ -43,20 +36,13 @@ export function AuthProvider({ children }) {
   };
 
   const register = async (name, email, password, password_confirmation) => {
-    // Get CSRF cookie first (required by Sanctum)
-    await fetch('/sanctum/csrf-cookie', { credentials: 'same-origin' });
-
     const response = await fetch('/api/register', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         'X-Requested-With': 'XMLHttpRequest',
-        'X-XSRF-TOKEN': decodeURIComponent(
-          document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1] || ''
-        ),
       },
-      credentials: 'same-origin',
       body: JSON.stringify({ name, email, password, password_confirmation }),
     });
 
