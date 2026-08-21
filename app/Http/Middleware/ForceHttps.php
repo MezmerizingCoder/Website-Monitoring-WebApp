@@ -9,7 +9,10 @@ class ForceHttps
 {
     public function handle(Request $request, Closure $next)
     {
-        $request->server->set('HTTPS', 'on');
+        // Only force HTTPS for non-API requests
+        if (!$request->is('api/*')) {
+            $request->server->set('HTTPS', 'on');
+        }
         return $next($request);
     }
 }
