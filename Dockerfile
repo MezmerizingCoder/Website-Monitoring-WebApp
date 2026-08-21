@@ -15,8 +15,15 @@ WORKDIR /var/www/html
 # Copy full application first
 COPY . .
 
-# Install PHP dependencies
-RUN composer install --no-dev --optimize-autoloader --no-interaction
+# Create .env from example if not present
+RUN cp -n .env.example .env 2>/dev/null || true
+
+# Install PHP dependencies (skip scripts, artisan needs .env)
+RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
+
+# Generate optimized autoload and discover packages
+RUN composer dump-autoload --optimize
+RUN php artisan package:discover --ansi
 
 # Install Node dependencies and build frontend
 RUN npm ci && npm run build
