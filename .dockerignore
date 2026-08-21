@@ -1,0 +1,39 @@
+# Version control
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Dependencies
+node_modules
+vendor
+
+# Build artifacts
+laravel-react-app/public/build
+laravel-react-app/public/hot
+laravel-react-app/storage/*.key
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Docker
+Dockerfile
+docker-compose*.yml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Testing
+phpunit.xml
+tests
