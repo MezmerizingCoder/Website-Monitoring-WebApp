@@ -53,8 +53,9 @@ class UptimeGuardWP
         // Add settings link to plugins list
         add_filter('plugin_action_links_' . plugin_basename(__FILE__), [$this, 'add_settings_link']);
 
-        // AJAX endpoint for manual sync
+        // AJAX endpoints
         add_action('wp_ajax_uptime_guard_sync', [$this, 'ajax_sync']);
+        add_action('wp_ajax_uptime_guard_save_settings', [$this, 'ajax_save_settings']);
     }
 
     /**
@@ -254,6 +255,56 @@ class UptimeGuardWP
 
         <script>
         jQuery(document).ready(function($) {
+            // Handle Save & Connect
+            $('#uptime-guard-connect-btn').on('click', function(e) {
+                e.preventDefault();
+                var btn = $(this);
+                var form = btn.closest('form');
+                var appUrl = $('#app_url').val().replace(/\/$/, '');
+                var pairingCode = $('#pairing_code').val();
+
+                if (!appUrl || !pairingCode) {
+                    alert('Please enter both App URL and Pairing Code.');
+                    return;
+                }
+
+                btn.prop('disabled', true).val('Connecting...');
+
+                // First save settings via AJAX
+                $.post(ajaxurl, {
+                    action: 'uptime_guard_save_settings',
+                    app_url: appUrl,
+                    pairing_code: pairingCode
+                }).done(function() {
+                    // Now attempt to pair
+                    $.ajax({
+                        url: appUrl + '/api/wordpress/pair',
+                        type: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify({ pairing_code: pairingCode }),
+                        success: function(response) {
+                            // Mark as connected
+                            $.post(ajaxurl, {
+                                action: 'uptime_guard_save_settings',
+                                app_url: appUrl,
+                                pairing_code: pairingCode,
+                                connected: '1'
+                            }).done(function() {
+                                location.reload();
+                            });
+                        },
+                        error: function(xhr) {
+                            var msg = 'Connection failed.';
+                            if (xhr.responseJSON && xhr.responseJSON.message) {
+                                msg = xhr.responseJSON.message;
+                            }
+                            alert('❌ ' + msg);
+                            btn.prop('disabled', false).val('Save & Connect');
+                        }
+                    });
+                });
+            });
+
             // Handle manual sync
             $('#uptime-guard-sync-btn').on('click', function() {
                 var btn = $(this);
@@ -284,6 +335,21 @@ class UptimeGuardWP
         });
         </script>
         <?php
+    }
+
+    /**
+     * AJAX save settings handler
+     */
+    public function ajax_save_settings()
+    {
+        $settings = get_option(UPTIME_GUARD_OPTION_KEY, []);
+        $settings['app_url'] = esc_url_raw(rtrim($_POST['app_url'] ?? '', '/'));
+        $settings['pairing_code'] = sanitize_text_field($_POST['pairing_code'] ?? '');
+        if (isset($_POST['connected'])) {
+            $settings['connected'] = $_POST['connected'] === '1';
+        }
+        update_option(UPTIME_GUARD_OPTION_KEY, $settings);
+        wp_send_json_success('Settings saved.');
     }
 
     /**
