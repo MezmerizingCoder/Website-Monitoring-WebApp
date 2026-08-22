@@ -28,5 +28,12 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('register', function ($request) {
             return Limit::perMinute(3)->by($request->ip());
         });
+
+        // Force Google OAuth config from env at runtime (bypasses cached config)
+        config([
+            'services.google.client_id' => env('GOOGLE_CLIENT_ID'),
+            'services.google.client_secret' => env('GOOGLE_CLIENT_SECRET'),
+            'services.google.redirect' => env('GOOGLE_REDIRECT_URI', '/api/auth/google/callback'),
+        ]);
     }
 }
