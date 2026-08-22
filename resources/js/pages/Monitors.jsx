@@ -24,6 +24,7 @@ import {
   CheckCircle,
   AlertTriangle,
   Clock,
+  Gauge,
 } from 'lucide-react';
 
 export default function Monitors() {
@@ -97,12 +98,20 @@ export default function Monitors() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-foreground">Monitors</h1>
-        <Button asChild>
-          <Link to="/monitors/create">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Monitor
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" asChild>
+            <Link to="/pagespeed">
+              <Gauge className="h-4 w-4 mr-2" />
+              PageSpeed
+            </Link>
+          </Button>
+          <Button asChild>
+            <Link to="/monitors/create">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Monitor
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Summary */}

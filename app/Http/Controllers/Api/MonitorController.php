@@ -184,6 +184,9 @@ class MonitorController extends Controller
         ]);
     }
 
+    /**
+     * Enhanced check that gathers HTTP status, SSL, IP, hosting, timing, and more.
+     */
     protected function performCheck(Monitor $monitor): void
     {
         $startTime = microtime(true);
@@ -192,28 +195,154 @@ class MonitorController extends Controller
         $errorMessage = null;
         $bodyPreview = null;
 
+        // Detail fields
+        $httpStatusText = null;
+        $ipAddress = null;
+        $serverSoftware = null;
+        $hostingProvider = null;
+        $cdnProvider = null;
+        $contentType = null;
+        $contentLength = null;
+        $redirectUrl = null;
+        $redirectCount = 0;
+        $sslStatus = 'unknown';
+        $sslExpiry = null;
+        $sslIssuer = null;
+        $sslDaysRemaining = null;
+        $dnsTime = null;
+        $connectTime = null;
+        $tlsTime = null;
+        $ttfb = null;
+        $allHeaders = [];
+
+        $url = $monitor->url;
+        $parsedUrl = parse_url($url);
+        $host = $parsedUrl['host'] ?? '';
+
+        // ── DNS Resolution ──
+        $dnsStart = microtime(true);
+        $ipAddress = @gethostbyname($host);
+        if ($ipAddress === $host) {
+            $ipAddress = null; // gethostbyname returns input on failure
+        }
+        $dnsTime = round((microtime(true) - $dnsStart) * 1000, 2);
+
+        // ── SSL Certificate Check ──
+        if (($parsedUrl['scheme'] ?? '') === 'https' && $ipAddress) {
+            $sslInfo = $this->checkSslCertificate($host, $parsedUrl['port'] ?? 443);
+            $sslStatus = $sslInfo['status'];
+            $sslExpiry = $sslInfo['expiry'];
+            $sslIssuer = $sslInfo['issuer'];
+            $sslDaysRemaining = $sslInfo['days_remaining'];
+        }
+
+        // ── HTTP Request with detailed timing ──
         try {
-            $response = Http::timeout(30)
-                ->withHeaders(array_merge([
-                    'User-Agent' => 'UptimeGuard/1.0 (https://uptimeguard.dev)',
-                    'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                    'Accept-Language' => 'en-US,en;q=0.5',
-                ], $monitor->headers ?? []))
-                ->withoutVerifying()
-                ->get($monitor->url);
+            // Use curl for detailed timing info
+            $ch = curl_init();
+            curl_setopt_array($ch, [
+                CURLOPT_URL => $url,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_MAXREDIRS => 5,
+                CURLOPT_TIMEOUT => 30,
+                CURLOPT_CONNECTTIMEOUT => 10,
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_SSL_VERIFYHOST => false,
+                CURLOPT_HEADER => true,
+                CURLOPT_NOBODY => false,
+                CURLOPT_USERAGENT => 'UptimeGuard/1.0 (https://uptimeguard.dev)',
+                CURLOPT_ENCODING => '',
+            ]);
 
-            $responseCode = $response->status();
-            $bodyPreview = substr($response->body(), 0, 500);
+            $responseBody = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $responseInfo = curl_getinfo($ch);
+            $appconnectTime = curl_getinfo($ch, CURLINFO_APPCONNECT_TIME);
+            $curlError = curl_error($ch);
+            $curlErrno = curl_errno($ch);
+            curl_close($ch);
 
-            if ($response->failed()) {
-                $status = 'down';
-                $errorMessage = 'HTTP ' . $responseCode;
+            // Timing from curl
+            $connectTime = round($responseInfo['connect_time'] * 1000, 2);
+            $tlsTime = ($appconnectTime && $appconnectTime > 0)
+                ? round(($appconnectTime - $responseInfo['connect_time']) * 1000, 2)
+                : null;
+            $ttfb = round($responseInfo['starttransfer_time'] * 1000, 2);
+
+            // Redirect info
+            $redirectCount = $responseInfo['redirect_count'];
+            if ($redirectCount > 0) {
+                $redirectUrl = $responseInfo['redirect_url'] ?: null;
             }
 
-            if ($monitor->keyword && !str_contains($response->body(), $monitor->keyword)) {
+            // Content info
+            $contentType = $responseInfo['content_type'] ?? null;
+            if ($contentType) {
+                // Clean content type (remove charset etc)
+                $contentType = explode(';', $contentType)[0];
+                $contentType = trim($contentType);
+            }
+            $contentLength = $responseInfo['download_content_length'] > 0
+                ? (int) $responseInfo['download_content_length']
+                : null;
+
+            // Server software from headers
+            $rawHeaders = substr($responseBody, 0, $responseInfo['header_size']);
+            $headerLines = array_filter(explode("\r\n", $rawHeaders));
+            foreach ($headerLines as $line) {
+                if (strpos($line, ':') !== false) {
+                    [$key, $value] = explode(':', $line, 2);
+                    $allHeaders[trim($key)] = trim($value);
+                }
+            }
+
+            $serverSoftware = $allHeaders['server'] ?? null;
+            $httpStatusText = $this->getHttpStatusText($httpCode);
+
+            // Extract body (after headers)
+            $bodyPreview = substr($responseBody, $responseInfo['header_size'], 500);
+
+            // Detect CDN
+            $cdnProvider = $this->detectCdn($allHeaders);
+
+            // Detect hosting provider via IP
+            if ($ipAddress) {
+                $hostingProvider = $this->detectHostingProvider($ipAddress, $host);
+            }
+
+            // ── Determine status ──
+            $responseCode = $httpCode;
+
+            if ($curlError && $curlErrno !== 0) {
+                $status = 'down';
+                $errorMessage = $curlError;
+            } elseif ($httpCode === 0) {
+                $status = 'down';
+                $errorMessage = 'No response received';
+            } elseif ($httpCode >= 400) {
+                $status = 'down';
+                $errorMessage = 'HTTP ' . $httpCode . ' ' . $httpStatusText;
+            }
+
+            // Keyword check
+            if ($status === 'up' && $monitor->keyword && !str_contains($responseBody, $monitor->keyword)) {
                 $status = 'down';
                 $errorMessage = 'Keyword "' . $monitor->keyword . '" not found';
             }
+
+            // SSL warning for expiring soon
+            if ($status === 'up' && $sslStatus === 'expiring_soon') {
+                // Keep status up but add warning to error_message
+                $errorMessage = ($errorMessage ? $errorMessage . '; ' : '') . 'SSL certificate expiring soon (' . $sslDaysRemaining . ' days)';
+            }
+
+            // SSL expired/invalid = down
+            if ($status === 'up' && in_array($sslStatus, ['expired', 'invalid'])) {
+                $status = 'down';
+                $errorMessage = 'SSL certificate ' . $sslStatus;
+            }
+
         } catch (\Exception $e) {
             $status = 'down';
             $errorMessage = $e->getMessage();
@@ -221,15 +350,18 @@ class MonitorController extends Controller
 
         $responseTime = round((microtime(true) - $startTime) * 1000, 2);
 
+        // ── Save check record ──
         $check = $monitor->checks()->create([
             'status' => $status,
             'response_code' => $responseCode,
             'response_time' => $responseTime,
             'error_message' => $errorMessage,
             'body_preview' => $bodyPreview,
+            'ip_address' => $ipAddress,
             'checked_at' => now(),
         ]);
 
+        // ── Update monitor with all details ──
         $monitor->update([
             'status' => $status,
             'last_checked_at' => now(),
@@ -237,6 +369,31 @@ class MonitorController extends Controller
             'error_message' => $errorMessage,
             'last_up_at' => $status === 'up' ? now() : $monitor->last_up_at,
             'last_down_at' => $status === 'down' ? now() : $monitor->last_down_at,
+            // HTTP
+            'http_status_code' => $responseCode,
+            'http_status_text' => $httpStatusText,
+            // SSL
+            'ssl_status' => $sslStatus,
+            'ssl_expiry' => $sslExpiry,
+            'ssl_issuer' => $sslIssuer,
+            'ssl_days_remaining' => $sslDaysRemaining,
+            // Network
+            'ip_address' => $ipAddress,
+            'server_software' => $serverSoftware,
+            'hosting_provider' => $hostingProvider,
+            'cdn_provider' => $cdnProvider,
+            'content_type' => $contentType,
+            'content_length' => $contentLength,
+            // Redirects
+            'redirect_url' => $redirectUrl,
+            'redirect_count' => $redirectCount,
+            // Timing
+            'dns_time' => $dnsTime,
+            'connect_time' => $connectTime,
+            'tls_time' => $tlsTime,
+            'ttfb' => $ttfb,
+            // Headers
+            'headers' => $allHeaders ?: null,
         ]);
 
         // Update uptime percentage
@@ -247,5 +404,230 @@ class MonitorController extends Controller
         // Update avg response time
         $avgResponse = $monitor->checks()->where('status', 'up')->avg('response_time');
         $monitor->update(['avg_response_time' => round($avgResponse, 2)]);
+    }
+
+    /**
+     * Check SSL certificate details for a host.
+     */
+    private function checkSslCertificate(string $host, int $port = 443): array
+    {
+        $result = [
+            'status' => 'unknown',
+            'expiry' => null,
+            'issuer' => null,
+            'days_remaining' => null,
+        ];
+
+        try {
+            $context = stream_context_create([
+                'ssl' => [
+                    'capture_peer_cert' => true,
+                    'verify_peer' => false,
+                    'verify_peer_name' => false,
+                ],
+            ]);
+
+            $stream = @stream_socket_client(
+                "ssl://{$host}:{$port}",
+                $errno,
+                $errstr,
+                10,
+                STREAM_CLIENT_CONNECT,
+                $context
+            );
+
+            if (!$stream) {
+                $result['status'] = 'invalid';
+                return $result;
+            }
+
+            $cert = stream_context_get_params($stream);
+            $peerCert = $cert['options']['ssl']['peer_certificate'] ?? null;
+
+            if (!$peerCert) {
+                $result['status'] = 'missing';
+                fclose($stream);
+                return $result;
+            }
+
+            $certInfo = openssl_x509_parse($peerCert);
+            fclose($stream);
+
+            if (!$certInfo) {
+                $result['status'] = 'invalid';
+                return $result;
+            }
+
+            // Expiry
+            $expiryTimestamp = $certInfo['validTo_time_t'] ?? null;
+            if ($expiryTimestamp) {
+                $result['expiry'] = date('Y-m-d H:i:s', $expiryTimestamp);
+                $daysRemaining = (int) floor(($expiryTimestamp - time()) / 86400);
+                $result['days_remaining'] = $daysRemaining;
+
+                if ($daysRemaining < 0) {
+                    $result['status'] = 'expired';
+                } elseif ($daysRemaining <= 14) {
+                    $result['status'] = 'expiring_soon';
+                } else {
+                    $result['status'] = 'valid';
+                }
+            }
+
+            // Issuer
+            $issuer = $certInfo['issuer'] ?? [];
+            $issuerParts = [];
+            foreach (['O', 'CN', 'C'] as $field) {
+                if (isset($issuer[$field])) {
+                    $issuerParts[] = $issuer[$field];
+                }
+            }
+            $result['issuer'] = implode(', ', $issuerParts) ?: null;
+
+        } catch (\Exception $e) {
+            $result['status'] = 'invalid';
+        }
+
+        return $result;
+    }
+
+    /**
+     * Detect CDN provider from response headers.
+     */
+    private function detectCdn(array $headers): ?string
+    {
+        $server = strtolower($headers['server'] ?? '');
+        $cfRay = $headers['cf-ray'] ?? '';
+        $xAmzCfId = $headers['x-amz-cf-id'] ?? '';
+        $xFastly = $headers['x-fastly-request-id'] ?? '';
+        $xServedBy = $headers['x-served-by'] ?? '';
+        $xShopify = $headers['x-shopify-stage'] ?? '';
+
+        if ($cfRay) return 'Cloudflare';
+        if ($xAmzCfId) return 'Amazon CloudFront';
+        if ($xFastly) return 'Fastly';
+        if (strpos($xServedBy, 'cache') !== false) return 'Varnish';
+        if ($xShopify) return 'Shopify CDN';
+        if (strpos($server, 'cloudflare') !== false) return 'Cloudflare';
+        if (strpos($server, 'akamaighost') !== false) return 'Akamai';
+        if (strpos($server, 'cloudfront') !== false) return 'Amazon CloudFront';
+        if (strpos($server, 'varnish') !== false) return 'Varnish';
+        if (strpos($server, 'cdn') !== false) return 'CDN';
+
+        return null;
+    }
+
+    /**
+     * Detect hosting provider from IP address using reverse DNS and IP range checks.
+     */
+    private function detectHostingProvider(string $ip, string $host): ?string
+    {
+        // 1) Check PTR record (reverse DNS)
+        $ptr = @gethostbyaddr($ip);
+        if ($ptr && $ptr !== $ip) {
+            $ptrLower = strtolower($ptr);
+
+            $ptrMap = [
+                'cloudflare'    => 'Cloudflare',
+                'amazonaws'     => 'Amazon AWS',
+                'amazon'        => 'Amazon AWS',
+                'aws'           => 'Amazon AWS',
+                'google'        => 'Google Cloud',
+                'azure'         => 'Microsoft Azure',
+                'digitalocean'  => 'DigitalOcean',
+                'linode'        => 'Akamai (Linode)',
+                'vultr'         => 'Vultr',
+                'heroku'        => 'Heroku',
+                'vercel'        => 'Vercel',
+                'netlify'       => 'Netlify',
+                'fly.io'        => 'Fly.io',
+                'fly-app'       => 'Fly.io',
+                'render'        => 'Render',
+                'wpengine'      => 'WP Engine',
+                'kinsta'        => 'Kinsta',
+                'siteground'    => 'SiteGround',
+                'godaddy'       => 'GoDaddy',
+                'namecheap'     => 'Namecheap',
+                'cpanel'        => 'cPanel Hosting',
+                'plesk'         => 'Plesk Hosting',
+                'nginx'         => 'Nginx',
+                'apache'        => 'Apache Hosting',
+                'hetzner'       => 'Hetzner',
+                'ovh'           => 'OVH',
+                'ionos'         => 'IONOS',
+                'dreamhost'     => 'DreamHost',
+                'bluehost'      => 'Bluehost',
+                'hostgator'     => 'HostGator',
+                'a2hosting'     => 'A2 Hosting',
+                'inmotion'      => 'InMotion Hosting',
+                'hstgr'         => 'Hostinger',
+                'hostinger'     => 'Hostinger',
+            ];
+
+            foreach ($ptrMap as $keyword => $provider) {
+                if (strpos($ptrLower, $keyword) !== false) {
+                    return $provider;
+                }
+            }
+
+            // Return PTR hostname as a hint if it differs from the IP
+            return $ptr;
+        }
+
+        // 2) Check known IP ranges (first octet patterns)
+        $ipParts = explode('.', $ip);
+        if (count($ipParts) === 4) {
+            // Hetzner: 5.9.x.x, 162.55.x.x, 188.40.x.x
+            if ($ipParts[0] === '5' && $ipParts[1] === '9') return 'Hetzner';
+            if ($ipParts[0] === '162' && $ipParts[1] === '55') return 'Hetzner';
+            if ($ipParts[0] === '188' && $ipParts[1] === '40') return 'Hetzner';
+
+            // OVH: 51.38.x.x, 87.98.x.x, 148.113.x.x, 194.163.x.x, 2604: (IPv6)
+            if ($ipParts[0] === '51' && $ipParts[1] === '38') return 'OVH';
+            if ($ipParts[0] === '87' && $ipParts[1] === '98') return 'OVH';
+            if ($ipParts[0] === '148' && $ipParts[1] === '113') return 'OVH';
+            if ($ipParts[0] === '194' && $ipParts[1] === '163') return 'OVH';
+
+            // DigitalOcean: 157.230.x.x, 167.71.x.x, 206.189.x.x
+            if ($ipParts[0] === '157' && $ipParts[1] === '230') return 'DigitalOcean';
+            if ($ipParts[0] === '167' && $ipParts[1] === '71') return 'DigitalOcean';
+            if ($ipParts[0] === '206' && $ipParts[1] === '189') return 'DigitalOcean';
+
+            // Vultr: 45.77.x.x, 149.28.x.x
+            if ($ipParts[0] === '45' && $ipParts[1] === '77') return 'Vultr';
+            if ($ipParts[0] === '149' && $ipParts[1] === '28') return 'Vultr';
+        }
+
+        return null;
+    }
+
+    /**
+     * Get human-readable HTTP status text.
+     */
+    private function getHttpStatusText(int $code): string
+    {
+        $statuses = [
+            200 => 'OK',
+            201 => 'Created',
+            204 => 'No Content',
+            301 => 'Moved Permanently',
+            302 => 'Found',
+            304 => 'Not Modified',
+            307 => 'Temporary Redirect',
+            308 => 'Permanent Redirect',
+            400 => 'Bad Request',
+            401 => 'Unauthorized',
+            403 => 'Forbidden',
+            404 => 'Not Found',
+            405 => 'Method Not Allowed',
+            408 => 'Request Timeout',
+            429 => 'Too Many Requests',
+            500 => 'Internal Server Error',
+            502 => 'Bad Gateway',
+            503 => 'Service Unavailable',
+            504 => 'Gateway Timeout',
+        ];
+
+        return $statuses[$code] ?? 'Unknown';
     }
 }

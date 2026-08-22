@@ -263,9 +263,9 @@ export default function Header({ onMenuToggle, sidebarOpen }) {
               <p className="text-xs text-muted-foreground font-normal">{user?.email}</p>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => navigate('/login')}>
+            <DropdownMenuItem onClick={() => navigate('/settings')}>
               <User className="h-4 w-4 mr-2" />
-              Profile
+              Settings
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={logout} className="text-destructive">

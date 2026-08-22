@@ -31,6 +31,25 @@ class Monitor extends Model
         'error_message',
         'headers',
         'is_active',
+        // Detailed monitoring fields
+        'http_status_code',
+        'http_status_text',
+        'ssl_status',
+        'ssl_expiry',
+        'ssl_issuer',
+        'ssl_days_remaining',
+        'ip_address',
+        'server_software',
+        'hosting_provider',
+        'cdn_provider',
+        'content_type',
+        'content_length',
+        'redirect_url',
+        'redirect_count',
+        'dns_time',
+        'connect_time',
+        'tls_time',
+        'ttfb',
     ];
 
     protected $casts = [
@@ -41,6 +60,7 @@ class Monitor extends Model
         'last_checked_at' => 'datetime',
         'last_up_at' => 'datetime',
         'last_down_at' => 'datetime',
+        'ssl_expiry' => 'datetime',
         'is_active' => 'boolean',
     ];
 

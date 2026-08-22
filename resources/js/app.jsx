@@ -20,6 +20,9 @@ import NotFound from './pages/NotFound';
 import WordPressSites from './pages/WordPressSites';
 import WordPressDetail from './pages/WordPressDetail';
 import AddWordPressSite from './pages/AddWordPressSite';
+import Settings from './pages/Settings';
+import PageSpeedInsights from './pages/PageSpeedInsights';
+import AdminPanel from './pages/AdminPanel';
 import '../css/app.css';
 
 function ProtectedRoute({ children }) {
@@ -49,6 +52,15 @@ function App() {
           <Route path="/monitors/:id" element={<ProtectedRoute><MonitorDetail /></ProtectedRoute>} />
           <Route path="/monitors/:id/edit" element={<ProtectedRoute><EditMonitor /></ProtectedRoute>} />
           <Route path="/incidents" element={<ProtectedRoute><Incidents /></ProtectedRoute>} />
+
+          {/* PageSpeed */}
+          <Route path="/pagespeed" element={<ProtectedRoute><PageSpeedInsights /></ProtectedRoute>} />
+
+          {/* Settings */}
+          <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+
+          {/* Admin */}
+          <Route path="/admin" element={<ProtectedRoute><AdminPanel /></ProtectedRoute>} />
 
           {/* WordPress Monitor */}
           <Route path="/wordpress" element={<ProtectedRoute><WordPressSites /></ProtectedRoute>} />

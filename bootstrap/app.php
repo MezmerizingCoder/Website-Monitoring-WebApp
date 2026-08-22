@@ -16,6 +16,10 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             \App\Http\Middleware\ForceHttps::class,
         ]);
+
+        $middleware->api(append: [
+            \App\Http\Middleware\CheckBlocked::class,
+        ]);
         $middleware->trustProxies(at: [
             'header' => \Illuminate\Http\Request::HEADER_X_FORWARDED_FOR |
                 \Illuminate\Http\Request::HEADER_X_FORWARDED_HOST |

@@ -22,6 +22,10 @@ class User extends Authenticatable
         'phone',
         'email_notifications',
         'sms_notifications',
+        'pagespeed_api_key',
+        'is_admin',
+        'is_blocked',
+        'blocked_at',
     ];
 
     protected $hidden = [
@@ -36,10 +40,14 @@ class User extends Authenticatable
             'password' => 'hashed',
             'email_notifications' => 'boolean',
             'sms_notifications' => 'boolean',
+            'is_admin' => 'boolean',
+            'is_blocked' => 'boolean',
+            'blocked_at' => 'datetime',
         ];
     }
 
-    // Relationships
+    // ── Relationships ──
+
     public function plan(): BelongsTo
     {
         return $this->belongsTo(Plan::class);
@@ -65,7 +73,8 @@ class User extends Authenticatable
         return $this->hasMany(WordpressSite::class);
     }
 
-    // Helpers
+    // ── Helpers ──
+
     public function getMonitorCount(): int
     {
         return $this->monitors()->active()->count();
@@ -82,5 +91,31 @@ class User extends Authenticatable
     public function getMonitorLimit(): int
     {
         return $this->plan ? $this->plan->monitor_limit : 5;
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->is_admin === true;
+    }
+
+    public function isBlocked(): bool
+    {
+        return $this->is_blocked === true;
+    }
+
+    public function block(): void
+    {
+        $this->update([
+            'is_blocked' => true,
+            'blocked_at' => now(),
+        ]);
+    }
+
+    public function unblock(): void
+    {
+        $this->update([
+            'is_blocked' => false,
+            'blocked_at' => null,
+        ]);
     }
 }

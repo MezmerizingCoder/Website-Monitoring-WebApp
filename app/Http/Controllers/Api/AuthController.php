@@ -60,6 +60,15 @@ class AuthController extends Controller
         }
 
         $user = Auth::user();
+
+        // Check if user is blocked
+        if ($user->isBlocked()) {
+            Auth::logout();
+            return response()->json([
+                'message' => 'Your account has been blocked. Please contact support.',
+            ], 403);
+        }
+
         $token = $user->createToken('auth-token')->plainTextToken;
 
         return response()->json([
@@ -93,5 +102,25 @@ class AuthController extends Controller
         $request->user()->update($validated);
 
         return response()->json($request->user()->fresh()->load('plan'));
+    }
+
+    public function changePassword(Request $request)
+    {
+        $validated = $request->validate([
+            'current_password' => 'required|string',
+            'password' => 'required|string|min:8|confirmed',
+        ]);
+
+        if (!Hash::check($validated['current_password'], $request->user()->password)) {
+            return response()->json([
+                'message' => 'Current password is incorrect.',
+            ], 422);
+        }
+
+        $request->user()->update([
+            'password' => Hash::make($validated['password']),
+        ]);
+
+        return response()->json(['message' => 'Password updated successfully.']);
     }
 }

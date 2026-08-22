@@ -6,6 +6,8 @@ use App\Http\Controllers\Api\MonitorController;
 use App\Http\Controllers\Api\IncidentController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\WordpressMonitorController;
+use App\Http\Controllers\Api\PageSpeedController;
+use App\Http\Controllers\Api\AdminController;
 use Illuminate\Support\Facades\Route;
 
 // Public routes
@@ -22,6 +24,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'user']);
     Route::put('/user', [AuthController::class, 'updateProfile']);
+    Route::put('/user/password', [AuthController::class, 'changePassword']);
 
     // Dashboard
     Route::get('/dashboard', [DashboardController::class, 'index']);
@@ -51,4 +54,22 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/wordpress-sites/{id}', [WordpressMonitorController::class, 'show']);
     Route::delete('/wordpress-sites/{id}', [WordpressMonitorController::class, 'destroy']);
     Route::post('/wordpress-sites/{id}/regenerate-code', [WordpressMonitorController::class, 'regenerateCode']);
+
+    // PageSpeed Insights
+    Route::get('/pagespeed/key', [PageSpeedController::class, 'getKeyStatus']);
+    Route::put('/pagespeed/key', [PageSpeedController::class, 'saveKey']);
+    Route::delete('/pagespeed/key', [PageSpeedController::class, 'deleteKey']);
+    Route::post('/pagespeed/check', [PageSpeedController::class, 'runCheck']);
+    Route::post('/monitors/{monitor}/pagespeed', [PageSpeedController::class, 'runMonitorCheck']);
+
+    // Admin Routes
+    Route::prefix('admin')->group(function () {
+        Route::get('/stats', [AdminController::class, 'stats']);
+        Route::get('/users', [AdminController::class, 'index']);
+        Route::get('/users/{id}', [AdminController::class, 'show']);
+        Route::put('/users/{id}/block', [AdminController::class, 'block']);
+        Route::put('/users/{id}/unblock', [AdminController::class, 'unblock']);
+        Route::put('/users/{id}/toggle-admin', [AdminController::class, 'toggleAdmin']);
+        Route::delete('/users/{id}', [AdminController::class, 'destroy']);
+    });
 });

@@ -1,5 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
+import { useAuth } from '@/context/AuthContext';
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -10,6 +11,9 @@ import {
   Plus,
   ChevronLeft,
   ChevronRight,
+  Settings,
+  Gauge,
+  Shield,
 } from 'lucide-react';
 
 const navItems = [
@@ -24,6 +28,11 @@ const navItems = [
     icon: Globe,
   },
   {
+    to: '/pagespeed',
+    label: 'PageSpeed',
+    icon: Gauge,
+  },
+  {
     to: '/incidents',
     label: 'Incidents',
     icon: AlertTriangle,
@@ -33,9 +42,22 @@ const navItems = [
     label: 'WP Updates',
     icon: RefreshCw,
   },
+  {
+    to: '/settings',
+    label: 'Settings',
+    icon: Settings,
+  },
 ];
 
-function SidebarContent({ onLinkClick, collapsed, setCollapsed }) {
+const adminItems = [
+  {
+    to: '/admin',
+    label: 'Admin Panel',
+    icon: Shield,
+  },
+];
+
+function SidebarContent({ onLinkClick, collapsed, setCollapsed, isAdmin }) {
   return (
     <div className="flex flex-col h-full">
       {/* Logo */}
@@ -72,6 +94,31 @@ function SidebarContent({ onLinkClick, collapsed, setCollapsed }) {
             {!collapsed && <span>{item.label}</span>}
           </NavLink>
         ))}
+
+        {/* Admin section */}
+        {isAdmin && (
+          <>
+            <Separator className="my-2" />
+            {adminItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                onClick={onLinkClick}
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                    isActive
+                      ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                      : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                  )
+                }
+              >
+                <item.icon className="h-4 w-4 shrink-0" />
+                {!collapsed && <span>{item.label}</span>}
+              </NavLink>
+            ))}
+          </>
+        )}
       </nav>
 
       <Separator />
@@ -94,7 +141,9 @@ function SidebarContent({ onLinkClick, collapsed, setCollapsed }) {
 }
 
 export default function Sidebar({ isOpen, onClose }) {
+  const { user } = useAuth();
   const [collapsed, setCollapsed] = React.useState(false);
+  const isAdmin = user?.is_admin === true;
 
   return (
     <>
@@ -105,7 +154,7 @@ export default function Sidebar({ isOpen, onClose }) {
           collapsed ? 'w-16' : 'w-60'
         )}
       >
-        <SidebarContent collapsed={collapsed} setCollapsed={setCollapsed} />
+        <SidebarContent collapsed={collapsed} setCollapsed={setCollapsed} isAdmin={isAdmin} />
       </aside>
 
       {/* Mobile backdrop */}
@@ -123,6 +172,7 @@ export default function Sidebar({ isOpen, onClose }) {
             onLinkClick={onClose}
             collapsed={false}
             setCollapsed={() => {}}
+            isAdmin={isAdmin}
           />
         </aside>
       )}
