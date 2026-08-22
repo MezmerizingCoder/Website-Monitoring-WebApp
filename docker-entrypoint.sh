@@ -2,7 +2,7 @@
 set -e
 
 # Write all env vars to .env
-printenv | grep -E "^(APP_|DB_|MAIL_|CACHE_|QUEUE_|SESSION_|FILESYSTEM_|VITE_|SANCTUM_)" > .env
+printenv | grep -E "^(APP_|DB_|MAIL_|CACHE_|QUEUE_|SESSION_|FILESYSTEM_|VITE_|SANCTUM_|GOOGLE_)" > .env
 
 # Force HTTPS - remove old APP_URL line and add correct one
 grep -v '^APP_URL=' .env > .env.tmp && mv .env.tmp .env
