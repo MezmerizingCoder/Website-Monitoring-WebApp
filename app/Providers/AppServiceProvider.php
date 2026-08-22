@@ -30,10 +30,22 @@ class AppServiceProvider extends ServiceProvider
         });
 
         // Force Google OAuth config from env at runtime (bypasses cached config)
-        // Using getenv() instead of env() because env() returns null when config is cached
-        $clientId = getenv('GOOGLE_CLIENT_ID') ?: '';
-        $clientSecret = getenv('GOOGLE_CLIENT_SECRET') ?: '';
-        $redirect = getenv('GOOGLE_REDIRECT_URI') ?: '';
+        // Try multiple sources: env(), getenv(), $_ENV, $_SERVER
+        $clientId = env('GOOGLE_CLIENT_ID')
+            ?? getenv('GOOGLE_CLIENT_ID')
+            ?? $_ENV['GOOGLE_CLIENT_ID']
+            ?? $_SERVER['GOOGLE_CLIENT_ID']
+            ?? '';
+        $clientSecret = env('GOOGLE_CLIENT_SECRET')
+            ?? getenv('GOOGLE_CLIENT_SECRET')
+            ?? $_ENV['GOOGLE_CLIENT_SECRET']
+            ?? $_SERVER['GOOGLE_CLIENT_SECRET']
+            ?? '';
+        $redirect = env('GOOGLE_REDIRECT_URI')
+            ?? getenv('GOOGLE_REDIRECT_URI')
+            ?? $_ENV['GOOGLE_REDIRECT_URI']
+            ?? $_SERVER['GOOGLE_REDIRECT_URI']
+            ?? '';
 
         if ($clientId) {
             config([
