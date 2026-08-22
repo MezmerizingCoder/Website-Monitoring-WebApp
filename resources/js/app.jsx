@@ -17,6 +17,8 @@ import Tables from './pages/Tables';
 import Modals from './pages/Modals';
 import Login from './pages/Login';
 import NotFound from './pages/NotFound';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import TermsConditions from './pages/TermsConditions';
 import WordPressSites from './pages/WordPressSites';
 import WordPressDetail from './pages/WordPressDetail';
 import AddWordPressSite from './pages/AddWordPressSite';
@@ -44,6 +46,8 @@ function App() {
         <Routes>
           {/* Guest routes */}
           <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/terms" element={<TermsConditions />} />
 
           {/* Protected routes */}
           <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />

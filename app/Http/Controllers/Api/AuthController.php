@@ -17,7 +17,16 @@ class AuthController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users',
-            'password' => 'required|string|min:8|confirmed',
+            'password' => [
+                'required',
+                'string',
+                'min:8',
+                'confirmed',
+                'regex:/[A-Z]/',   // at least one uppercase
+                'regex:/[a-z]/',   // at least one lowercase
+                'regex:/[0-9]/',   // at least one number
+                'regex:/[^A-Za-z0-9]/', // at least one symbol
+            ],
         ]);
 
         $user = User::create([
@@ -53,7 +62,21 @@ class AuthController extends Controller
             'password' => 'required',
         ]);
 
+        $user = User::where('email', $request->email)->first();
+
+        // Check if account is locked due to too many failed attempts
+        if ($user && $user->isLocked()) {
+            $minutesLeft = $user->locked_until->diffInMinutes(now());
+            throw ValidationException::withMessages([
+                'email' => ["Account temporarily locked. Try again in {$minutesLeft} minute(s)."],
+            ]);
+        }
+
         if (!Auth::attempt($request->only('email', 'password'))) {
+            // Record failed attempt
+            if ($user) {
+                $user->recordFailedLogin();
+            }
             throw ValidationException::withMessages([
                 'email' => ['The provided credentials do not match our records.'],
             ]);
@@ -68,6 +91,17 @@ class AuthController extends Controller
                 'message' => 'Your account has been blocked. Please contact support.',
             ], 403);
         }
+
+        // Check if email is verified
+        if (!$user->email_verified_at) {
+            Auth::logout();
+            throw ValidationException::withMessages([
+                'email' => ['Please verify your email address before logging in.'],
+            ]);
+        }
+
+        // Reset failed login attempts on successful login
+        $user->resetLoginAttempts();
 
         $token = $user->createToken('auth-token')->plainTextToken;
 
@@ -108,7 +142,16 @@ class AuthController extends Controller
     {
         $validated = $request->validate([
             'current_password' => 'required|string',
-            'password' => 'required|string|min:8|confirmed',
+            'password' => [
+                'required',
+                'string',
+                'min:8',
+                'confirmed',
+                'regex:/[A-Z]/',
+                'regex:/[a-z]/',
+                'regex:/[0-9]/',
+                'regex:/[^A-Za-z0-9]/',
+            ],
         ]);
 
         if (!Hash::check($validated['current_password'], $request->user()->password)) {

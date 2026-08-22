@@ -10,9 +10,9 @@ use App\Http\Controllers\Api\PageSpeedController;
 use App\Http\Controllers\Api\AdminController;
 use Illuminate\Support\Facades\Route;
 
-// Public routes
-Route::post('/login', [AuthController::class, 'login']);
-Route::post('/register', [AuthController::class, 'register']);
+// Public routes (with rate limiting)
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
+Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:register');
 
 // WP Plugin routes (authenticated by pairing code, not user token)
 Route::post('/wordpress/pair', [WordpressMonitorController::class, 'pair']);

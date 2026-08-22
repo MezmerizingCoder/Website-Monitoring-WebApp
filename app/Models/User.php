@@ -26,6 +26,8 @@ class User extends Authenticatable
         'is_admin',
         'is_blocked',
         'blocked_at',
+        'login_attempts',
+        'locked_until',
     ];
 
     protected $hidden = [
@@ -101,6 +103,32 @@ class User extends Authenticatable
     public function isBlocked(): bool
     {
         return $this->is_blocked === true;
+    }
+
+    public function isLocked(): bool
+    {
+        return $this->locked_until && $this->locked_until->isFuture();
+    }
+
+    public function recordFailedLogin(): void
+    {
+        $attempts = $this->login_attempts + 1;
+        $updates = ['login_attempts' => $attempts];
+
+        // Lock account after 5 failed attempts for 15 minutes
+        if ($attempts >= 5) {
+            $updates['locked_until'] = now()->addMinutes(15);
+        }
+
+        $this->update($updates);
+    }
+
+    public function resetLoginAttempts(): void
+    {
+        $this->update([
+            'login_attempts' => 0,
+            'locked_until' => null,
+        ]);
     }
 
     public function block(): void

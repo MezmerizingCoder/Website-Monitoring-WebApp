@@ -18,14 +18,6 @@ function GoogleIcon({ className }) {
   );
 }
 
-function AppleIcon({ className }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-      <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
-    </svg>
-  );
-}
-
 export default function Login() {
   const { login, register } = useAuth();
   const navigate = useNavigate();
@@ -99,10 +91,6 @@ export default function Login() {
     window.location.href = '/api/auth/google/redirect';
   };
 
-  const handleAppleLogin = () => {
-    window.location.href = '/api/auth/apple/redirect';
-  };
-
   return (
     <div className="flex min-h-svh flex-col items-center justify-center bg-zinc-950 p-6 md:p-10">
       <div className="w-full max-w-sm md:max-w-4xl">
@@ -136,10 +124,6 @@ export default function Login() {
                   <Button variant="outline" className="w-full border-zinc-700 bg-zinc-800 text-zinc-100 hover:bg-zinc-700 hover:text-white" onClick={handleGoogleLogin}>
                     <GoogleIcon className="mr-2 size-4" />
                     Continue with Google
-                  </Button>
-                  <Button variant="outline" className="w-full border-zinc-700 bg-zinc-800 text-zinc-100 hover:bg-zinc-700 hover:text-white" onClick={handleAppleLogin}>
-                    <AppleIcon className="mr-2 size-4" />
-                    Continue with Apple
                   </Button>
                 </div>
 
@@ -198,6 +182,11 @@ export default function Login() {
                       onChange={(e) => setForm({ ...form, password: e.target.value })}
                       required
                     />
+                    {isRegister && (
+                      <p className="text-xs text-zinc-500">
+                        Must be 8+ characters with uppercase, lowercase, number, and symbol.
+                      </p>
+                    )}
                   </div>
                   {isRegister && (
                     <div className="space-y-2">
@@ -264,9 +253,9 @@ export default function Login() {
         {/* Footer */}
         <div className="mt-6 text-center text-xs text-zinc-500">
           By continuing, you agree to our{' '}
-          <a href="#" className="underline underline-offset-4 hover:text-zinc-300">Terms of Service</a>
+          <a href="/terms" className="underline underline-offset-4 hover:text-zinc-300">Terms of Service</a>
           {' '}and{' '}
-          <a href="#" className="underline underline-offset-4 hover:text-zinc-300">Privacy Policy</a>.
+          <a href="/privacy" className="underline underline-offset-4 hover:text-zinc-300">Privacy Policy</a>.
         </div>
       </div>
     </div>

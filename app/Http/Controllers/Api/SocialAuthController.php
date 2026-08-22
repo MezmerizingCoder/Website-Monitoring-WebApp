@@ -17,40 +17,30 @@ class SocialAuthController extends Controller
      */
     public function googleRedirect()
     {
-        return Socialite::driver('google')->redirect();
+        return Socialite::driver('google')
+            ->scopes(['openid', 'profile', 'email'])
+            ->redirect();
     }
 
     /**
      * Handle Google OAuth callback.
      */
-    public function googleCallback()
+    public function googleCallback(Request $request)
     {
+        // Handle user cancellation or OAuth error from Google
+        if ($request->has('error')) {
+            $error = $request->input('error_description', $request->input('error'));
+            return redirect('/login?error=' . urlencode($error));
+        }
+
         try {
-            $googleUser = Socialite::driver('google')->user();
+            $googleUser = Socialite::driver('google')
+                ->scopes(['openid', 'profile', 'email'])
+                ->user();
             return $this->handleProviderCallback($googleUser, 'google');
         } catch (\Exception $e) {
-            return redirect('/login?error=' . urlencode('Google authentication failed.'));
-        }
-    }
-
-    /**
-     * Redirect to Apple OAuth.
-     */
-    public function appleRedirect()
-    {
-        return Socialite::driver('apple')->redirect();
-    }
-
-    /**
-     * Handle Apple OAuth callback.
-     */
-    public function appleCallback()
-    {
-        try {
-            $appleUser = Socialite::driver('apple')->user();
-            return $this->handleProviderCallback($appleUser, 'apple');
-        } catch (\Exception $e) {
-            return redirect('/login?error=' . urlencode('Apple authentication failed.'));
+            \Log::error('Google OAuth callback error: ' . $e->getMessage());
+            return redirect('/login?error=' . urlencode('Google authentication failed: ' . $e->getMessage()));
         }
     }
 

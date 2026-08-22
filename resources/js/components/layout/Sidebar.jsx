@@ -42,11 +42,6 @@ const navItems = [
     label: 'WP Updates',
     icon: RefreshCw,
   },
-  {
-    to: '/settings',
-    label: 'Settings',
-    icon: Settings,
-  },
 ];
 
 const adminItems = [
@@ -119,21 +114,24 @@ function SidebarContent({ onLinkClick, collapsed, setCollapsed, isAdmin }) {
             ))}
           </>
         )}
-      </nav>
+      </nav>      <Separator />
 
-      <Separator />
-
-      {/* Add Monitor Button */}
+      {/* Settings */}
       <div className="p-2">
         <NavLink
-          to="/monitors/create"
+          to="/settings"
           onClick={onLinkClick}
-          className={cn(
-            'flex items-center justify-center gap-2 w-full rounded-md px-3 py-2 text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 transition-colors'
-          )}
+          className={({ isActive }) =>
+            cn(
+              'flex items-center gap-3 w-full rounded-md px-3 py-2 text-sm font-medium transition-colors',
+              isActive
+                ? 'bg-primary/10 text-primary'
+                : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+            )
+          }
         >
-          <Plus className="h-4 w-4" />
-          {!collapsed && <span>Add Monitor</span>}
+          <Settings className="h-4 w-4 shrink-0" />
+          {!collapsed && <span>Settings</span>}
         </NavLink>
       </div>
     </div>
