@@ -30,10 +30,17 @@ class AppServiceProvider extends ServiceProvider
         });
 
         // Force Google OAuth config from env at runtime (bypasses cached config)
-        config([
-            'services.google.client_id' => env('GOOGLE_CLIENT_ID'),
-            'services.google.client_secret' => env('GOOGLE_CLIENT_SECRET'),
-            'services.google.redirect' => env('GOOGLE_REDIRECT_URI', '/api/auth/google/callback'),
-        ]);
+        // Using getenv() instead of env() because env() returns null when config is cached
+        $clientId = getenv('GOOGLE_CLIENT_ID') ?: '';
+        $clientSecret = getenv('GOOGLE_CLIENT_SECRET') ?: '';
+        $redirect = getenv('GOOGLE_REDIRECT_URI') ?: '';
+
+        if ($clientId) {
+            config([
+                'services.google.client_id' => $clientId,
+                'services.google.client_secret' => $clientSecret,
+                'services.google.redirect' => $redirect ?: '/api/auth/google/callback',
+            ]);
+        }
     }
 }
